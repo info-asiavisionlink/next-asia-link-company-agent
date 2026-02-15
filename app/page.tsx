@@ -35,25 +35,20 @@ function isValidUrl(u: string) {
 function asObject(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 }
-
 function getString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
-
 function getStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   return value.map((v) => String(v));
 }
-
 function getNumber(value: unknown): number | undefined {
   if (typeof value === "number") return value;
   if (typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))) return Number(value);
   return undefined;
 }
-
 function parseApi(value: unknown): { ok?: ApiOk; ng?: ApiNg } {
   const obj = asObject(value);
-
   const message = getString(obj["message"]);
   const details = getStringArray(obj["details"]);
   const status = getNumber(obj["status"]);
@@ -65,9 +60,7 @@ function parseApi(value: unknown): { ok?: ApiOk; ng?: ApiNg } {
     body,
   };
 
-  if (details && details.length) {
-    return { ng: { ...base, details } };
-  }
+  if (details && details.length) return { ng: { ...base, details } };
   return { ok: base };
 }
 
@@ -98,7 +91,6 @@ export default function Page() {
     setRows((prev) => {
       const next = [...prev];
       const [first, ...rest] = parts;
-
       next[next.length - 1] = { ...next[next.length - 1], url: first };
       for (const u of rest) next.push({ id: uid(), url: u });
       return next;
@@ -107,14 +99,14 @@ export default function Page() {
 
   const validate = () => {
     const errors: string[] = [];
-    if (uniqueUrls.length === 0) errors.push("URLが0件。最低1件入れろ。");
+    if (uniqueUrls.length === 0) errors.push("No URL provided. Add at least 1 target.");
 
     uniqueUrls.forEach((u, idx) => {
-      if (!isValidUrl(u)) errors.push(`(${idx + 1}) URL形式が壊れてる: ${u}`);
+      if (!isValidUrl(u)) errors.push(`#${idx + 1} Invalid URL format: ${u}`);
     });
 
     if (urls.length !== uniqueUrls.length) {
-      errors.push("重複URLが混ざってる。送信は自動でユニーク化する。");
+      errors.push("Duplicates detected. Payload will be de-duplicated automatically.");
     }
     return errors;
   };
@@ -123,9 +115,9 @@ export default function Page() {
     setResult(null);
 
     const errors = validate();
-    const fatal = errors.filter((e) => e.includes("壊れてる") || e.includes("0件"));
+    const fatal = errors.filter((e) => e.includes("Invalid URL") || e.includes("No URL"));
     if (fatal.length) {
-      setResult({ ok: false, message: "入力が雑。直せ。", details: errors });
+      setResult({ ok: false, message: "Input rejected.", details: errors });
       return;
     }
 
@@ -147,7 +139,7 @@ export default function Page() {
       if (!res.ok) {
         setResult({
           ok: false,
-          message: parsed.ng?.message ?? "送信失敗",
+          message: parsed.ng?.message ?? "Send failed.",
           details: parsed.ng?.details ?? [],
           data: parsed.ng,
         });
@@ -156,150 +148,276 @@ export default function Page() {
 
       setResult({
         ok: true,
-        message: "n8nに投げた。次はワークフロー側で会社情報抽出だ。",
+        message: "Payload sent.",
         data: parsed.ok ?? { message: "forwarded" },
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setResult({ ok: false, message: "通信が死んだ", details: [msg] });
+      setResult({ ok: false, message: "Network error.", details: [msg] });
     } finally {
       setSubmitting(false);
     }
   };
 
+  const clearAll = () => {
+    setRows([{ id: uid(), url: "" }]);
+    setResult(null);
+  };
+
   return (
-    <main className="min-h-screen px-4 py-10 md:py-14">
+    <main className="min-h-screen">
       <style jsx global>{`
+        @import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Share+Tech+Mono&display=swap");
+
         :root {
-          --bg0: #060012;
-          --bg1: #0b0030;
-          --bg2: #12003a;
-          --text: #eaf7ff;
-          --muted: #9ad7e6;
-          --danger: #ff2ed1;
-          --ok: #2dffb2;
-          --panel: rgba(10, 0, 30, 0.58);
-          --panel2: rgba(20, 0, 60, 0.35);
+          --bg0: #05000f;
+          --bg1: #09002a;
+          --bg2: #120045;
+
+          --c: #00e5ff;
+          --m: #b100ff;
+          --g: #2dffb2;
+          --r: #ff2ed1;
+
+          --text: rgba(234, 247, 255, 0.92);
+          --muted: rgba(154, 215, 230, 0.8);
+
+          --panel: rgba(10, 0, 30, 0.62);
+          --panel2: rgba(0, 0, 0, 0.22);
           --line: rgba(0, 229, 255, 0.18);
+
+          --br: 18px;
         }
 
         html,
         body {
           height: 100%;
-          background: radial-gradient(1200px 800px at 20% 10%, rgba(177, 0, 255, 0.18), transparent 60%),
-            radial-gradient(1000px 700px at 80% 20%, rgba(0, 229, 255, 0.16), transparent 55%),
+          background: radial-gradient(1100px 700px at 15% 10%, rgba(177, 0, 255, 0.22), transparent 60%),
+            radial-gradient(900px 600px at 85% 20%, rgba(0, 229, 255, 0.18), transparent 55%),
             linear-gradient(135deg, var(--bg0), var(--bg1) 55%, var(--bg2));
           color: var(--text);
+          overflow-x: hidden;
         }
 
-        .cyber-grid::before {
+        * {
+          box-sizing: border-box;
+        }
+
+        .font-title {
+          font-family: "Orbitron", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+          letter-spacing: 0.02em;
+        }
+        .font-mono {
+          font-family: "Share Tech Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+            "Courier New", monospace;
+        }
+
+        /* HUD overlays */
+        .scanlines::before {
+          content: "";
+          position: fixed;
+          inset: 0;
+          pointer-events: none;
+          background: repeating-linear-gradient(
+            to bottom,
+            rgba(255, 255, 255, 0.035),
+            rgba(255, 255, 255, 0.035) 1px,
+            rgba(0, 0, 0, 0) 4px,
+            rgba(0, 0, 0, 0) 8px
+          );
+          mix-blend-mode: overlay;
+          opacity: 0.35;
+        }
+
+        .noise::after {
+          content: "";
+          position: fixed;
+          inset: 0;
+          pointer-events: none;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+          opacity: 0.08;
+        }
+
+        .grid::before {
           content: "";
           position: fixed;
           inset: 0;
           pointer-events: none;
           background-image: linear-gradient(to right, rgba(0, 229, 255, 0.08) 1px, transparent 1px),
             linear-gradient(to bottom, rgba(0, 229, 255, 0.08) 1px, transparent 1px);
-          background-size: 48px 48px;
-          mask-image: radial-gradient(
-            circle at 50% 20%,
-            rgba(0, 0, 0, 1),
-            rgba(0, 0, 0, 0.2) 55%,
-            rgba(0, 0, 0, 0) 75%
-          );
-          opacity: 0.65;
+          background-size: 46px 46px;
+          mask-image: radial-gradient(circle at 50% 25%, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0.2) 60%, rgba(0, 0, 0, 0) 78%);
+          opacity: 0.55;
         }
 
-        .neon-border {
+        .glow {
+          box-shadow: 0 0 22px rgba(0, 229, 255, 0.14), 0 0 32px rgba(177, 0, 255, 0.12);
+        }
+
+        .panel {
           position: relative;
-          border: 1px solid rgba(0, 229, 255, 0.25);
-          background: linear-gradient(180deg, var(--panel), var(--panel2));
-          box-shadow: 0 0 0 1px rgba(177, 0, 255, 0.12) inset, 0 0 24px rgba(0, 229, 255, 0.12),
-            0 0 36px rgba(177, 0, 255, 0.1);
-          border-radius: 18px;
+          border-radius: var(--br);
+          background: linear-gradient(180deg, rgba(10, 0, 30, 0.65), rgba(0, 0, 0, 0.22));
+          border: 1px solid rgba(0, 229, 255, 0.22);
         }
-
-        .neon-border::after {
+        .panel::after {
           content: "";
           position: absolute;
           inset: -1px;
-          border-radius: 18px;
+          border-radius: var(--br);
           pointer-events: none;
           background: linear-gradient(
             90deg,
             rgba(0, 229, 255, 0),
-            rgba(0, 229, 255, 0.25),
-            rgba(177, 0, 255, 0.2),
+            rgba(0, 229, 255, 0.22),
+            rgba(177, 0, 255, 0.18),
             rgba(0, 229, 255, 0)
           );
           filter: blur(10px);
           opacity: 0.55;
         }
 
-        .badge {
-          border: 1px solid rgba(0, 229, 255, 0.22);
-          background: rgba(0, 0, 0, 0.25);
+        .corner {
+          position: absolute;
+          width: 18px;
+          height: 18px;
+          border: 2px solid rgba(0, 229, 255, 0.55);
+          filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.25));
+        }
+        .corner.tl {
+          top: 10px;
+          left: 10px;
+          border-right: 0;
+          border-bottom: 0;
+          border-radius: 8px 0 0 0;
+        }
+        .corner.tr {
+          top: 10px;
+          right: 10px;
+          border-left: 0;
+          border-bottom: 0;
+          border-radius: 0 8px 0 0;
+        }
+        .corner.bl {
+          bottom: 10px;
+          left: 10px;
+          border-right: 0;
+          border-top: 0;
+          border-radius: 0 0 0 8px;
+        }
+        .corner.br {
+          bottom: 10px;
+          right: 10px;
+          border-left: 0;
+          border-top: 0;
+          border-radius: 0 0 8px 0;
         }
 
-        .input-cyber {
+        .pill {
+          border: 1px solid rgba(0, 229, 255, 0.22);
           background: rgba(0, 0, 0, 0.25);
+          border-radius: 999px;
+        }
+
+        .input {
+          width: 100%;
+          border-radius: 14px;
+          background: rgba(0, 0, 0, 0.28);
           border: 1px solid rgba(0, 229, 255, 0.22);
           outline: none;
+          color: var(--text);
         }
-        .input-cyber:focus {
-          border-color: rgba(0, 229, 255, 0.55);
-          box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.12), 0 0 22px rgba(0, 229, 255, 0.12);
+        .input:focus {
+          border-color: rgba(0, 229, 255, 0.6);
+          box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.14), 0 0 26px rgba(0, 229, 255, 0.12);
         }
 
-        .neon-btn {
+        .btn {
+          border-radius: 14px;
           border: 1px solid rgba(0, 229, 255, 0.35);
           background: linear-gradient(135deg, rgba(0, 229, 255, 0.12), rgba(177, 0, 255, 0.12));
-          box-shadow: 0 0 18px rgba(0, 229, 255, 0.15), 0 0 22px rgba(177, 0, 255, 0.12);
-          transition: transform 0.15s ease, box-shadow 0.15s ease;
+          box-shadow: 0 0 18px rgba(0, 229, 255, 0.16), 0 0 22px rgba(177, 0, 255, 0.12);
+          transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
         }
-        .neon-btn:hover {
+        .btn:hover {
           transform: translateY(-1px);
+          box-shadow: 0 0 24px rgba(0, 229, 255, 0.24), 0 0 30px rgba(177, 0, 255, 0.18);
+          filter: saturate(1.1);
+        }
+
+        .btn-danger {
+          border: 1px solid rgba(255, 46, 209, 0.35);
+          color: rgba(255, 46, 209, 0.95);
+          background: rgba(255, 46, 209, 0.08);
+        }
+        .btn-danger:hover {
+          background: rgba(255, 46, 209, 0.12);
+        }
+
+        .statusDot {
+          width: 8px;
+          height: 8px;
+          border-radius: 999px;
+          background: var(--g);
+          box-shadow: 0 0 12px rgba(45, 255, 178, 0.35);
         }
       `}</style>
 
-      <div className="cyber-grid" />
+      <div className="scanlines noise grid" />
 
-      <div className="mx-auto max-w-3xl">
-        <header className="mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Next Asia Link</h1>
-          <p className="mt-2 text-sm md:text-base text-[var(--muted)]">会社情報登録AIエージェント（入力UI）</p>
-          <div className="mt-5 h-px w-full bg-[var(--line)]" />
-        </header>
-
-        <section className="neon-border p-5 md:p-7">
-          <div className="flex items-start justify-between gap-4">
+      <div className="mx-auto max-w-5xl px-4 py-10 md:py-14">
+        {/* TOP HUD BAR */}
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="statusDot" />
             <div>
-              <div className="inline-flex items-center gap-2">
-                <span className="badge px-2 py-1 rounded-lg text-xs text-[var(--muted)] font-mono">URL INPUT</span>
-                <span className="badge px-2 py-1 rounded-lg text-xs text-[var(--muted)] font-mono">ADD / ADD / ADD</span>
+              <div className="font-title text-2xl md:text-4xl font-extrabold">Next Asia Link</div>
+              <div className="font-mono text-xs md:text-sm text-[var(--muted)]">
+                COMPANY REGISTRATION CONSOLE · BUILD: ALPHA
               </div>
-
-              <h2 className="mt-3 text-xl md:text-2xl font-semibold tracking-tight">会社URL 登録パネル</h2>
-              <p className="mt-2 text-sm text-[var(--muted)] leading-relaxed">
-                URLを入れて「追加」で枠を増やせ。複数URLをまとめ貼りすると自動で分解して増える。
-              </p>
-            </div>
-
-            <div className="shrink-0 flex flex-col items-end gap-2">
-              <button onClick={addRow} className="neon-btn px-4 py-2 rounded-xl text-sm font-semibold" type="button">
-                ＋ 追加
-              </button>
-              <div className="text-xs text-[var(--muted)] font-mono">rows: {rows.length}</div>
             </div>
           </div>
 
-          <div className="mt-5 space-y-3">
+          <div className="hidden md:flex items-center gap-2 font-mono text-xs text-[var(--muted)]">
+            <span className="pill px-3 py-2">MODE: SCAN</span>
+            <span className="pill px-3 py-2">LINKS: {uniqueUrls.length}</span>
+            <span className="pill px-3 py-2">ROWS: {rows.length}</span>
+          </div>
+        </div>
+
+        {/* MAIN PANEL */}
+        <section className="panel glow p-5 md:p-7 relative">
+          <div className="corner tl" />
+          <div className="corner tr" />
+          <div className="corner bl" />
+          <div className="corner br" />
+
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            <div>
+              <div className="font-title text-xl md:text-2xl font-bold">TARGET LINKS</div>
+              <div className="font-mono text-sm text-[var(--muted)] mt-2">
+                Paste multiple URLs (newline / comma / space supported). Duplicates will be removed.
+              </div>
+            </div>
+
+            <div className="flex gap-2 md:justify-end">
+              <button type="button" className="btn px-4 py-3 font-title text-sm" onClick={addRow}>
+                + ADD
+              </button>
+              <button type="button" className="btn btn-danger px-4 py-3 font-title text-sm" onClick={clearAll}>
+                CLEAR
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-3">
             {rows.map((row, idx) => (
               <div key={row.id} className="flex gap-2 items-center">
-                <div className="w-10 text-xs font-mono text-[var(--muted)]">#{String(idx + 1).padStart(2, "0")}</div>
+                <div className="font-mono text-xs text-[var(--muted)] w-14">#{String(idx + 1).padStart(2, "0")}</div>
 
                 <input
-                  className="input-cyber w-full px-4 py-3 rounded-xl text-sm font-mono"
-                  placeholder="https://example.com または example.com"
+                  className="input font-mono px-4 py-4 text-sm"
+                  placeholder="https://example.com or example.com"
                   value={row.url}
                   onChange={(e) => setUrl(row.id, e.target.value)}
                   onPaste={(e) => {
@@ -318,38 +436,49 @@ export default function Page() {
                 <button
                   type="button"
                   onClick={() => removeRow(row.id)}
-                  className="px-3 py-2 rounded-xl border border-[rgba(255,46,209,0.35)] text-[var(--danger)] hover:bg-[rgba(255,46,209,0.08)] transition disabled:opacity-40"
+                  className="btn btn-danger px-3 py-3 font-title text-xs disabled:opacity-40"
                   disabled={rows.length === 1}
-                  title={rows.length === 1 ? "最低1行は必要" : "削除"}
+                  title={rows.length === 1 ? "At least 1 row required" : "Remove"}
                 >
-                  削除
+                  DEL
                 </button>
               </div>
             ))}
           </div>
 
           <div className="mt-6 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-            <div className="text-xs text-[var(--muted)] font-mono">送信対象URL: {uniqueUrls.length} 件（重複は自動で除外）</div>
+            <div className="font-mono text-xs text-[var(--muted)]">
+              READY PAYLOAD: {uniqueUrls.length} LINK(S) · AUTO DEDUPE
+            </div>
 
             <button
               onClick={onSubmit}
-              className="neon-btn px-5 py-3 rounded-xl text-sm font-semibold disabled:opacity-50"
+              className="btn px-6 py-4 font-title text-sm disabled:opacity-50"
               disabled={submitting}
               type="button"
             >
-              {submitting ? "送信中..." : "n8nへ送信"}
+              {submitting ? "SENDING..." : "SEND"}
             </button>
           </div>
 
+          {/* RESULT CONSOLE */}
           {result && (
-            <div className="mt-5 rounded-2xl border border-[rgba(0,229,255,0.18)] bg-[rgba(0,0,0,0.25)] p-4">
-              <div className="font-semibold">
-                {result.ok ? <span className="text-[var(--ok)]">OK</span> : <span className="text-[var(--danger)]">NG</span>}{" "}
-                {result.message}
+            <div className="mt-6 rounded-2xl border border-[rgba(0,229,255,0.18)] bg-[rgba(0,0,0,0.28)] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-title text-sm font-bold">
+                  {result.ok ? (
+                    <span className="text-[var(--g)]">TRANSMISSION OK</span>
+                  ) : (
+                    <span className="text-[var(--r)]">TRANSMISSION FAILED</span>
+                  )}
+                </div>
+                <div className="font-mono text-xs text-[var(--muted)]">/api/submit</div>
               </div>
 
+              <div className="font-mono text-sm mt-2">{result.message}</div>
+
               {!result.ok && result.details?.length ? (
-                <ul className="mt-2 list-disc pl-5 text-sm text-[var(--muted)]">
+                <ul className="mt-3 list-disc pl-5 font-mono text-xs text-[var(--muted)]">
                   {result.details.map((d, i) => (
                     <li key={i} className="break-words">
                       {d}
@@ -359,17 +488,13 @@ export default function Page() {
               ) : null}
 
               {result.data ? (
-                <pre className="mt-3 text-xs text-[var(--muted)] overflow-auto whitespace-pre-wrap">
+                <pre className="mt-3 font-mono text-xs text-[var(--muted)] overflow-auto whitespace-pre-wrap">
 {JSON.stringify(result.data, null, 2)}
                 </pre>
               ) : null}
             </div>
           )}
         </section>
-
-        <footer className="mt-8 text-xs text-[var(--muted)] font-mono">
-          次：/api/submit → n8n Webhook に転送。Webhook URL は Vercel の Environment Variables に隠す。
-        </footer>
       </div>
     </main>
   );
